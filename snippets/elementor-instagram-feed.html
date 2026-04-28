@@ -1,1 +1,28 @@
-[Insta_feed_WP_plugin]
+<div id="instagram-feed"></div>
+
+<button id="load-more-instagram" data-after="">Show More</button>
+
+<div id="image-modal">
+    <div id="modal-overlay"></div>
+    <div id="modal-container">
+        <div id="modal-media-section">
+            <div id="modal-media-container">
+                <img id="modal-image-old" src="" alt="Instagram view" />
+                <img id="modal-image-new" src="" alt="Instagram view" />
+                <video id="modal-video-old" controls style="display: none;"></video>
+                <video id="modal-video-new" controls style="display: none;"></video>
+            </div>
+        </div>
+
+        <div id="modal-caption-section">
+            <div id="btn-container">
+                <button id="modal-prev-btn" class="modal-nav-btn" type="button">&lsaquo;</button>
+                <button id="modal-next-btn" class="modal-nav-btn" type="button">&rsaquo;</button>
+                <button id="modal-close-btn" class="modal-nav-btn" type="button">&times;</button>
+            </div>
+            <div id="modal-caption-content">
+                <p id="modal-caption-text" dir="ltr">Loading</p>
+            </div>
+        </div>
+    </div>
+</div>

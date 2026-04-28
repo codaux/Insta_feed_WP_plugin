@@ -1,0 +1,13 @@
+# Build artifacts
+dist/
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Local environment files
+.env
+*.local
+Old_Plugin/

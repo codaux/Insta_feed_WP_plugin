@@ -1,38 +1,46 @@
-/* ==== Main Instagram feed container for Masonry ==== */
+/* ==== ظرف اصلی فید اینستاگرام برای Masonry ==== */
 #instagram-feed,
 .Insta_feed_WP_plugin-feed {
     position: relative; 
 }
 
-/* ==== Instagram post item ==== */
+#instagram-feed:not(.masonry-ready),
+.Insta_feed_WP_plugin-feed:not(.masonry-ready) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: flex-start;
+}
+
+/* ==== هر المان پست اینستاگرام ==== */
 .instagram-photo {
-    width: calc(16.66% - 10px); /* 6 desktop columns */
+    width: calc(16.66% - 10px); /* 6 ستون در دسکتاپ */
     margin-bottom: 10px;
     cursor: pointer;
     opacity: 1;
     transition: opacity 0.5s ease, transform 0.5s ease;
 }
 
-/* Initial animation state for newly inserted photos. */
+/* کلاس برای تصاویر جدید جهت افکت اولیه */
 .instagram-photo.new-photo {
     transform: translateY(20px);
     opacity: 0;
 }
 
-/* Responsive: 4 tablet columns. */
+/* واکنشگرا: 4 ستون در تبلت */
 @media screen and (max-width: 768px) {
     .instagram-photo {
         width: calc(25% - 10px);
     }
 }
-/* Responsive: 3 mobile columns. */
+/* واکنشگرا: 3 ستون در موبایل */
 @media screen and (max-width: 480px) {
     .instagram-photo {
         width: calc(33.33% - 10px);
     }
 }
 
-/* ==== Feed image slider container ==== */
+/* ==== ظرف اسلاید تصاویر در فید ==== */
 .slide-container {
     position: relative;
     width: 100%;
@@ -46,7 +54,7 @@
     transition: transform 3s ease-out, border-radius 1s ease;
 }
 
-/* ==== Slider images ==== */
+/* ==== تصاویر اسلاید (قدیمی و جدید) ==== */
 .slide-img {
     position: relative;
     width: 100%;
@@ -65,12 +73,12 @@
     left: 0;
 }
 
-/* ==== Photo hover effects ==== */
+/* ==== افکت هاور روی عکسها ==== */
 .instagram-photo:hover .slide-img {
     filter: grayscale(0);
 }
 
-/* Dim non-hovered posts while the pointer is inside the feed. */
+/* وقتی موس روی کل فید است ولی روی یک پست خاص نیست */
 #instagram-feed:hover .instagram-photo:not(:hover) .slide-container,
 .Insta_feed_WP_plugin-feed:hover .instagram-photo:not(:hover) .slide-container {
     filter: brightness(0.9);
@@ -85,7 +93,7 @@
     transform: scale(1.08);
 }
 
-/* ==== Load more button ==== */
+/* ==== دکمه Load More ==== */
 #load-more-instagram,
 .Insta_feed_WP_plugin-load-more {
     mix-blend-mode: multiply;
@@ -112,7 +120,26 @@
     transition: 0.5s ease;
 }
 
-/* ==== Modal styles ==== */
+.instagram-feed-status {
+    max-width: 780px;
+    margin: 10px auto;
+    padding: 8px 12px;
+    border-radius: 6px;
+    background: #f2f2f2;
+    color: #222;
+    font-family: roboto, sans-serif;
+    font-size: 12px;
+    line-height: 1.5;
+    text-align: center;
+    overflow-wrap: anywhere;
+}
+
+.instagram-feed-status.is-error {
+    background: #fff2f2;
+    color: #8a1f1f;
+}
+
+/* ==== استایلهای مودال ==== */
 #image-modal,
 .Insta_feed_WP_plugin-modal {
     display: none;

@@ -6,7 +6,8 @@ This project contains a custom WordPress plugin for displaying an Instagram feed
 
 1. WordPress plugin: `wordpress-plugin/Insta_feed_WP_plugin`
 2. Uploadable plugin ZIP builder: `scripts/build-plugin-zip.ps1`
-3. Shortcode reference snippet: `snippets/elementor-instagram-feed.html`
+3. Elementor HTML fallback snippet: `snippets/elementor-instagram-feed.html`
+4. GitHub Releases updater for public release-based plugin updates
 
 ## Manual WordPress Installation
 
@@ -36,6 +37,8 @@ Upload that ZIP from `Plugins > Add New > Upload Plugin` in the WordPress admin 
 
 Increase the `Version` value in `wordpress-plugin/Insta_feed_WP_plugin/Insta_feed_WP_plugin.php` before publishing a new release.
 
+The `dist/` directory is ignored by Git. Upload the generated ZIP as a GitHub Release asset instead of committing it to the repository.
+
 ## Required Configuration
 
 Define the Instagram Graph API access token and user ID in `wp-config.php`:
@@ -46,6 +49,8 @@ define('INSTAGRAM_USER_ID_grpxl', 'YOUR_USER_ID');
 ```
 
 If these constants are missing, the plugin shows an admin notice and the AJAX request returns an error.
+
+Do not commit real access tokens, user IDs, `.env` files, or server-specific configuration to this repository.
 
 ## Elementor Usage
 
@@ -69,7 +74,7 @@ The load more button text can be customized:
 [Insta_feed_WP_plugin button_text="Show More"]
 ```
 
-The file `snippets/elementor-instagram-feed.html` is kept only as a quick shortcode reference.
+The file `snippets/elementor-instagram-feed.html` contains the legacy HTML markup for Elementor's HTML widget. Use it only if you do not want to use the plugin widget or Elementor's Shortcode widget.
 
 ## Project Structure
 
@@ -86,7 +91,8 @@ The file `snippets/elementor-instagram-feed.html` is kept only as a quick shortc
     └── Insta_feed_WP_plugin
         ├── Insta_feed_WP_plugin.php
         ├── includes
-        │   └── class-Insta-feed-WP-plugin-elementor-widget.php
+        │   ├── class-Insta-feed-WP-plugin-elementor-widget.php
+        │   └── class-Insta-feed-WP-plugin-updater.php
         └── assets
             ├── css
             │   └── instagram-feed.css
@@ -100,8 +106,26 @@ The plugin registers an AJAX action named `get_instagram_photos`, fetches media 
 
 On the frontend, the script loads the first batch automatically, uses Masonry and imagesLoaded for layout, opens a modal on photo click, and continues pagination through the load more button.
 
+## GitHub Release Updates
+
+This plugin checks the latest public GitHub release from:
+
+```text
+https://github.com/codaux/Insta_feed_WP_plugin
+```
+
+To publish an update:
+
+1. Update `Version` in `wordpress-plugin/Insta_feed_WP_plugin/Insta_feed_WP_plugin.php`.
+2. Build the ZIP with `scripts/build-plugin-zip.ps1`.
+3. Commit and push the source changes.
+4. Create a GitHub Release using a tag like `v3.4.1`.
+5. Upload `dist/Insta_feed_WP_plugin.zip` to the release assets.
+
+WordPress will detect the new version from the latest GitHub Release and install the release asset when the plugin is updated from the admin panel.
+
 ## Faster Development Updates
 
 For quick CSS and JavaScript changes, work against a local or staging WordPress install and sync `wordpress-plugin/Insta_feed_WP_plugin` directly into that site's `wp-content/plugins/Insta_feed_WP_plugin` directory. Once the change is ready, build the ZIP and upload it to production.
 
-For a more professional update flow, the next step is to publish versioned GitHub releases and add a custom updater to the plugin. That would make updates appear inside the WordPress admin panel like regular plugin updates, but it requires a repository and a release process.
+For production updates, use the GitHub Release flow above so WordPress can show updates inside the admin panel like regular plugin updates.

@@ -2,7 +2,7 @@
 /*
 Plugin Name: Insta_feed_WP_plugin
 Description: Custom Instagram feed plugin with AJAX, shortcode, and Elementor widget support.
-Version: 3.4.0
+Version: 3.4.6
 Author: Insta_feed_WP_plugin
 Text Domain: Insta_feed_WP_plugin
 Update URI: false
@@ -10,10 +10,14 @@ Update URI: false
 
 defined('ABSPATH') || exit;
 
-define('INSTA_FEED_WP_PLUGIN_VERSION', '3.4.0');
+define('INSTA_FEED_WP_PLUGIN_VERSION', '3.4.6');
 define('INSTA_FEED_WP_PLUGIN_FILE', __FILE__);
 define('INSTA_FEED_WP_PLUGIN_PATH', plugin_dir_path(__FILE__));
 define('INSTA_FEED_WP_PLUGIN_URL', plugin_dir_url(__FILE__));
+define('INSTA_FEED_WP_PLUGIN_BASENAME', plugin_basename(__FILE__));
+define('INSTA_FEED_WP_PLUGIN_GITHUB_OWNER', 'codaux');
+define('INSTA_FEED_WP_PLUGIN_GITHUB_REPO', 'Insta_feed_WP_plugin');
+define('INSTA_FEED_WP_PLUGIN_RELEASE_ASSET', 'Insta_feed_WP_plugin.zip');
 
 // Main API access constants.
 // Define these values in wp-config.php.
@@ -46,30 +50,38 @@ add_shortcode('insta_feed_wp_plugin', 'Insta_feed_WP_plugin_render_feed');
  * 3. Render the feed markup for shortcode and Elementor.
  * ------------------------------------------------- */
 function Insta_feed_WP_plugin_render_feed($atts = []) {
-    static $instance = 0;
-    $instance++;
-
     $atts = shortcode_atts([
         'button_text' => 'Show More',
     ], $atts, 'Insta_feed_WP_plugin');
 
     ob_start();
     ?>
-    <div class="Insta_feed_WP_plugin-feed-wrap" data-Insta_feed_WP_plugin="<?php echo esc_attr($instance); ?>">
-        <div id="instagram-feed-<?php echo esc_attr($instance); ?>" class="Insta_feed_WP_plugin-feed"></div>
+    <div id="instagram-feed"></div>
 
-        <button id="load-more-instagram-<?php echo esc_attr($instance); ?>" class="Insta_feed_WP_plugin-load-more" data-after="">
-            <?php echo esc_html($atts['button_text']); ?>
-        </button>
+    <button id="load-more-instagram" data-after="">
+        <?php echo esc_html($atts['button_text']); ?>
+    </button>
 
-        <div id="image-modal-<?php echo esc_attr($instance); ?>" class="Insta_feed_WP_plugin-modal">
-            <div class="Insta_feed_WP_plugin-modal-overlay"></div>
-            <div class="Insta_feed_WP_plugin-modal-container">
-                <div class="Insta_feed_WP_plugin-modal-media-section">
-                    <div class="Insta_feed_WP_plugin-modal-media-container">
-                        <img class="Insta_feed_WP_plugin-modal-image-old" src="" alt="Instagram view" />
-                        <img class="Insta_feed_WP_plugin-modal-image-new" src="" alt="Instagram view" />
-                    </div>
+    <div id="image-modal">
+        <div id="modal-overlay"></div>
+        <div id="modal-container">
+            <div id="modal-media-section">
+                <div id="modal-media-container">
+                    <img id="modal-image-old" src="" alt="Instagram view" />
+                    <img id="modal-image-new" src="" alt="Instagram view" />
+                    <video id="modal-video-old" controls style="display: none;"></video>
+                    <video id="modal-video-new" controls style="display: none;"></video>
+                </div>
+            </div>
+
+            <div id="modal-caption-section">
+                <div id="btn-container">
+                    <button id="modal-prev-btn" class="modal-nav-btn" type="button">&lsaquo;</button>
+                    <button id="modal-next-btn" class="modal-nav-btn" type="button">&rsaquo;</button>
+                    <button id="modal-close-btn" class="modal-nav-btn" type="button">&times;</button>
+                </div>
+                <div id="modal-caption-content">
+                    <p id="modal-caption-text" dir="ltr">Loading</p>
                 </div>
             </div>
         </div>
@@ -118,6 +130,18 @@ function process_single_instagram_item($item) {
     return null;
 }
 
+function Insta_feed_WP_plugin_instagram_api_base_url() {
+    if (defined('INSTAGRAM_API_BASE_URL_grpxl') && INSTAGRAM_API_BASE_URL_grpxl) {
+        return untrailingslashit(INSTAGRAM_API_BASE_URL_grpxl);
+    }
+
+    $api_version = defined('INSTAGRAM_API_VERSION_grpxl') && INSTAGRAM_API_VERSION_grpxl
+        ? INSTAGRAM_API_VERSION_grpxl
+        : 'v19.0';
+
+    return 'https://graph.instagram.com/' . trim($api_version, '/');
+}
+
 /** --------------------------------------------------
  * 5. Fetch Instagram posts.
  * ------------------------------------------------- */
@@ -134,26 +158,31 @@ function fetch_instagram_photos_directly() {
     $target_count  = 12;
     $after_cursor  = isset($_GET['after']) ? sanitize_text_field($_GET['after']) : '';
     $exclude_hashtag = '#ex';
+    $debug_enabled = !empty($_GET['debug']) && current_user_can('manage_options');
     
     $filtered_items = [];
     $current_cursor = $after_cursor;
     $max_total_items = 1000;
     $processed_count = 0;
     $last_cursor_for_next_request = '';
+    $last_debug = [];
 
     // Keep fetching until enough valid posts are collected.
     while (count($filtered_items) < $target_count && $processed_count < $max_total_items) {
         
         // Build the Instagram API URL.
-        $api_url = sprintf(
-            'https://graph.instagram.com/v19.0/%s/media?fields=id,media_type,media_url,thumbnail_url,caption,permalink,children{media_url,media_type,thumbnail_url}&access_token=%s&limit=40',
-            $user_id,
-            $access_token
+        $api_url = add_query_arg(
+            [
+                'fields'       => 'id,media_type,media_url,thumbnail_url,caption,permalink,children{media_url,media_type,thumbnail_url}',
+                'access_token' => $access_token,
+                'limit'        => 40,
+            ],
+            Insta_feed_WP_plugin_instagram_api_base_url() . '/' . rawurlencode($user_id) . '/media'
         );
 
         // Add pagination cursor when present.
         if (!empty($current_cursor)) {
-            $api_url .= '&after=' . $current_cursor;
+            $api_url = add_query_arg('after', $current_cursor, $api_url);
         }
 
         // Send request to Instagram API.
@@ -164,8 +193,43 @@ function fetch_instagram_photos_directly() {
             return;
         }
 
+        $response_code = wp_remote_retrieve_response_code($response);
         $body = wp_remote_retrieve_body($response);
         $data = json_decode($body, true);
+        $last_debug = [
+            'api_base_url'  => Insta_feed_WP_plugin_instagram_api_base_url(),
+            'http_code'     => $response_code,
+            'body_preview'  => $debug_enabled ? substr(wp_strip_all_tags($body), 0, 500) : '',
+            'current_after' => $current_cursor,
+        ];
+
+        if ($response_code < 200 || $response_code >= 300) {
+            wp_send_json_error([
+                'message' => 'Instagram API returned HTTP ' . $response_code,
+                'debug'   => $debug_enabled ? $last_debug : null,
+            ]);
+            return;
+        }
+
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            wp_send_json_error([
+                'message' => 'Instagram API returned invalid JSON: ' . json_last_error_msg(),
+                'debug'   => $debug_enabled ? $last_debug : null,
+            ]);
+            return;
+        }
+
+        if (!empty($data['error'])) {
+            $instagram_error = $data['error'];
+            $message = $instagram_error['message'] ?? 'Instagram API returned an error.';
+            wp_send_json_error([
+                'message' => $message,
+                'type'    => $instagram_error['type'] ?? '',
+                'code'    => $instagram_error['code'] ?? '',
+                'debug'   => $debug_enabled ? $last_debug : null,
+            ]);
+            return;
+        }
 
         // Stop when no data is available.
         if (empty($data['data'])) {
@@ -214,7 +278,7 @@ function fetch_instagram_photos_directly() {
     $photos_html = array_map(function ($item) {
         $firstSlideUrl = esc_url($item['slides'][0]['thumb']);
         $id = esc_attr($item['id']);
-        $slidesJson = htmlspecialchars(json_encode($item['slides']), ENT_QUOTES, 'UTF-8');
+        $slidesJson = esc_attr(wp_json_encode($item['slides']));
         return sprintf(
             '<div class="instagram-photo" data-id="%s" data-slides="%s">
                 <div class="slide-container">
@@ -233,7 +297,12 @@ function fetch_instagram_photos_directly() {
         'next_cursor' => $last_cursor_for_next_request,
         'count'       => count($filtered_items),
         'processed'   => $processed_count,
+        'message'     => count($filtered_items) > 0 ? '' : 'Instagram returned no visible posts.',
     ];
+
+    if ($debug_enabled) {
+        $response_data['debug'] = $last_debug;
+    }
 
     wp_send_json_success($response_data);
 }
@@ -253,33 +322,53 @@ function Insta_feed_WP_plugin_enqueue_assets() {
         INSTA_FEED_WP_PLUGIN_VERSION
     );
 
-    // Masonry library.
-    wp_enqueue_script(
-        'masonry-pkgd',
-        'https://unpkg.com/masonry-layout@4.2.2/dist/masonry.pkgd.min.js',
-        [], '4.2.2', true
-    );
-
-    // imagesLoaded library required by Masonry.
-    wp_enqueue_script(
-        'imagesloaded',
-        'https://unpkg.com/imagesloaded@4.1.4/imagesloaded.pkgd.min.js',
-        ['masonry-pkgd'], '4.1.4', true
-    );
+    // Use WordPress' bundled copies so the feed does not depend on an external CDN.
+    wp_enqueue_script('masonry');
+    wp_enqueue_script('imagesloaded');
 
     // Main frontend script.
     wp_enqueue_script(
         'Insta_feed_WP_plugin-js',
         INSTA_FEED_WP_PLUGIN_URL . 'assets/js/instagram-feed.js',
-        ['masonry-pkgd', 'imagesloaded'],
+        [],
         INSTA_FEED_WP_PLUGIN_VERSION,
         true
     );
 
     // Pass AJAX URL to JavaScript.
-    wp_localize_script('Insta_feed_WP_plugin-js', 'Insta_feed_WP_plugin', [
+    $instagram_feed_ajax = [
         'ajax_url' => admin_url('admin-ajax.php'),
-    ]);
+    ];
+
+    wp_localize_script('Insta_feed_WP_plugin-js', 'rezaGrpxl', $instagram_feed_ajax);
+    wp_localize_script('Insta_feed_WP_plugin-js', 'Insta_feed_WP_plugin', $instagram_feed_ajax);
+}
+
+add_action('wp_footer', 'Insta_feed_WP_plugin_print_script_fallback', 99);
+
+function Insta_feed_WP_plugin_print_script_fallback() {
+    if (is_admin()) {
+        return;
+    }
+
+    $script_url = INSTA_FEED_WP_PLUGIN_URL . 'assets/js/instagram-feed.js?ver=' . rawurlencode(INSTA_FEED_WP_PLUGIN_VERSION);
+    ?>
+    <script>
+    (function() {
+        window.rezaGrpxl = window.rezaGrpxl || { ajax_url: <?php echo wp_json_encode(admin_url('admin-ajax.php')); ?> };
+        window.Insta_feed_WP_plugin = window.Insta_feed_WP_plugin || window.rezaGrpxl;
+
+        if (!document.getElementById('instagram-feed') || window.InstaFeedFrontendLoaded) {
+            return;
+        }
+
+        var script = document.createElement('script');
+        script.src = <?php echo wp_json_encode($script_url); ?>;
+        script.async = false;
+        document.body.appendChild(script);
+    })();
+    </script>
+    <?php
 }
 
 /** --------------------------------------------------
@@ -293,3 +382,11 @@ add_action('elementor/widgets/register', function($widgets_manager) {
     require_once INSTA_FEED_WP_PLUGIN_PATH . 'includes/class-Insta-feed-WP-plugin-elementor-widget.php';
     $widgets_manager->register(new Insta_Feed_WP_Plugin_Elementor_Widget());
 });
+
+/** --------------------------------------------------
+ * 8. GitHub Releases updater.
+ * ------------------------------------------------- */
+if (is_admin()) {
+    require_once INSTA_FEED_WP_PLUGIN_PATH . 'includes/class-Insta-feed-WP-plugin-updater.php';
+    new Insta_Feed_WP_Plugin_Updater();
+}
