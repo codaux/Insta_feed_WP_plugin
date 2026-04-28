@@ -127,6 +127,12 @@
         const modalOverlay = findInRoot(root, '.Insta_feed_WP_plugin-modal-overlay') || findInRoot(root, '#modal-overlay');
         const modalImageOld = findInRoot(root, '.Insta_feed_WP_plugin-modal-image-old') || findInRoot(root, '#modal-image-old');
         const modalImageNew = findInRoot(root, '.Insta_feed_WP_plugin-modal-image-new') || findInRoot(root, '#modal-image-new');
+        const modalVideoOld = findInRoot(root, '#modal-video-old');
+        const modalVideoNew = findInRoot(root, '#modal-video-new');
+        const modalCaptionText = findInRoot(root, '#modal-caption-text');
+        const modalPrevBtn = findInRoot(root, '#modal-prev-btn');
+        const modalNextBtn = findInRoot(root, '#modal-next-btn');
+        const modalCloseBtn = findInRoot(root, '#modal-close-btn');
         const defaultButtonText = loadMoreBtn ? (loadMoreBtn.textContent.trim() || 'Show More') : 'Show More';
         const debugMode = new URLSearchParams(window.location.search).has('instagram_feed_debug');
         const statusEl = document.createElement('div');
@@ -143,6 +149,7 @@
         let currentIntervals = new Map();
         let currentSlides = [];
         let currentIndex = 0;
+        let currentCaption = '';
         let slideInterval;
         let msnry = null;
         let isFetching = false;
@@ -254,6 +261,104 @@
             newImg.style.transform = 'translateX(100%)';
         }
 
+        function isVideoSlide(slide) {
+            return slide && slide.type === 'VIDEO';
+        }
+
+        function resetModalImages() {
+            if (!modalImageOld || !modalImageNew) return;
+
+            modalImageOld.style.display = 'block';
+            modalImageNew.style.display = 'block';
+            modalImageOld.style.transition = 'none';
+            modalImageNew.style.transition = 'none';
+            modalImageOld.style.transform = 'translateX(0)';
+            modalImageNew.style.transform = 'translateX(100%)';
+        }
+
+        function clearModalVideos() {
+            [modalVideoOld, modalVideoNew].forEach(video => {
+                if (!video) return;
+
+                video.pause();
+                video.removeAttribute('src');
+                video.load();
+                video.style.display = 'none';
+            });
+        }
+
+        function showModalVideo(src) {
+            if (!modalVideoOld) return;
+
+            if (modalImageOld) modalImageOld.style.display = 'none';
+            if (modalImageNew) modalImageNew.style.display = 'none';
+            if (modalVideoNew) modalVideoNew.style.display = 'none';
+
+            modalVideoOld.src = src;
+            modalVideoOld.style.display = 'block';
+            modalVideoOld.load();
+        }
+
+        function updateModalCaption() {
+            if (!modalCaptionText) return;
+
+            modalCaptionText.textContent = currentCaption || '';
+            modalCaptionText.setAttribute('dir', 'auto');
+        }
+
+        function updateModalControls() {
+            const hasMultipleSlides = currentSlides.length > 1;
+
+            [modalPrevBtn, modalNextBtn].forEach(button => {
+                if (!button) return;
+
+                button.disabled = !hasMultipleSlides;
+                button.style.opacity = hasMultipleSlides ? '1' : '0.35';
+                button.style.cursor = hasMultipleSlides ? 'pointer' : 'default';
+            });
+        }
+
+        function showCurrentModalSlide(animate) {
+            const slide = currentSlides[currentIndex];
+            if (!slide) return;
+
+            updateModalCaption();
+            updateModalControls();
+
+            if (isVideoSlide(slide)) {
+                clearInterval(slideInterval);
+                clearModalVideos();
+                showModalVideo(slide.full);
+                return;
+            }
+
+            clearModalVideos();
+            resetModalImages();
+
+            if (animate) {
+                slideImagesModal(slide.full);
+            } else if (modalImageOld) {
+                modalImageOld.src = slide.full;
+            }
+        }
+
+        function moveModalSlide(direction) {
+            if (currentSlides.length < 2) return;
+
+            currentIndex = (currentIndex + direction + currentSlides.length) % currentSlides.length;
+            showCurrentModalSlide(true);
+        }
+
+        function startModalAutoSlide() {
+            clearInterval(slideInterval);
+
+            if (currentSlides.length < 2 || currentSlides.some(isVideoSlide)) {
+                return;
+            }
+
+            slideInterval = setInterval(() => moveModalSlide(1), 2000);
+        }
+
         function openModal(photo) {
             currentSlides = safeParseSlides(photo);
             if (currentSlides.length === 0 || !modal || !modalOverlay || !modalImageOld) {
@@ -261,14 +366,11 @@
             }
 
             currentIndex = 0;
-            modalImageOld.src = currentSlides[currentIndex].full;
+            currentCaption = photo.getAttribute('data-caption') || '';
+            resetModalImages();
+            showCurrentModalSlide(false);
             modal.style.display = 'flex';
-            clearInterval(slideInterval);
-            slideInterval = setInterval(() => {
-                currentIndex = (currentIndex + 1) % currentSlides.length;
-                slideImagesModal(currentSlides[currentIndex].full);
-            }, 2000);
-
+            startModalAutoSlide();
             modalOverlay.addEventListener('click', closeModal, { once: true });
             document.addEventListener('keydown', closeOnEscape);
         }
@@ -281,6 +383,7 @@
 
         function closeModal() {
             clearInterval(slideInterval);
+            clearModalVideos();
             if (modal) modal.style.display = 'none';
             document.removeEventListener('keydown', closeOnEscape);
         }
@@ -477,6 +580,29 @@
                 if (nextCursor || instagramFeed.children.length === 0) {
                     fetchInstagramPhotos(nextCursor);
                 }
+            });
+        }
+
+        if (modalPrevBtn) {
+            modalPrevBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                moveModalSlide(-1);
+                startModalAutoSlide();
+            });
+        }
+
+        if (modalNextBtn) {
+            modalNextBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                moveModalSlide(1);
+                startModalAutoSlide();
+            });
+        }
+
+        if (modalCloseBtn) {
+            modalCloseBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                closeModal();
             });
         }
 

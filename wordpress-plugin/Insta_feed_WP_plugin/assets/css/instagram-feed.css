@@ -163,13 +163,26 @@
 #modal-container,
 .Insta_feed_WP_plugin-modal-container {
     position: relative;
-    width: 70%;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 32%);
+    width: min(92vw, 1080px);
+    height: 70vh;
     max-height: 70vh;
-    aspect-ratio: 1;
+    overflow: hidden;
+    border-radius: 14px;
+}
+#modal-media-section,
+#modal-media-container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
     overflow: hidden;
 }
 #modal-image-old,
 #modal-image-new,
+#modal-video-old,
+#modal-video-new,
 .Insta_feed_WP_plugin-modal-image-old,
 .Insta_feed_WP_plugin-modal-image-new {
     position: absolute;
@@ -187,4 +200,103 @@
 #modal-image-new,
 .Insta_feed_WP_plugin-modal-image-new {
     transform: translateX(100%);
+}
+
+#modal-caption-section {
+    position: relative;
+    z-index: 3;
+    display: flex;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    flex-direction: column;
+    overflow: hidden;
+    color: #fff;
+    background: rgba(245, 245, 245, 0.13);
+    border-left: 1px solid rgba(255, 255, 255, 0.18);
+    backdrop-filter: blur(18px) saturate(130%);
+}
+
+#btn-container {
+    flex: 0 0 auto;
+    display: flex;
+    justify-content: flex-end;
+    gap: 7px;
+    padding: 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.modal-nav-btn {
+    display: inline-flex;
+    width: 34px;
+    height: 34px;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.24);
+    color: #fff;
+    cursor: pointer;
+    font-size: 25px;
+    font-weight: 200;
+    line-height: 1;
+    outline: none;
+    transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+
+.modal-nav-btn:focus,
+.modal-nav-btn:focus-visible,
+.modal-nav-btn:active {
+    outline: none;
+    box-shadow: none;
+}
+
+.modal-nav-btn:hover:not(:disabled) {
+    background: rgba(0, 0, 0, 0.38);
+    border-color: rgba(255, 255, 255, 0.38);
+}
+
+.modal-nav-btn:disabled {
+    pointer-events: none;
+}
+
+#modal-caption-content {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    padding: 16px 18px 20px;
+}
+
+#modal-caption-text {
+    margin: 0;
+    color: #fff;
+    font-family: roboto, sans-serif;
+    font-size: 13px;
+    font-weight: 300;
+    line-height: 1.6;
+    letter-spacing: 0;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.42);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+@media screen and (max-width: 768px) {
+    #modal-container,
+    .Insta_feed_WP_plugin-modal-container {
+        grid-template-columns: 1fr;
+        grid-template-rows: minmax(0, 1fr) minmax(150px, 32%);
+        width: 90%;
+        height: 82vh;
+        max-height: 82vh;
+    }
+
+    #modal-caption-section {
+        border-left: 0;
+        border-top: 1px solid rgba(255, 255, 255, 0.18);
+    }
+
+    #modal-caption-content {
+        padding: 10px 12px 12px;
+    }
 }

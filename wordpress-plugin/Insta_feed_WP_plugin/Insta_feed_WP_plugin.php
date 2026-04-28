@@ -2,7 +2,7 @@
 /*
 Plugin Name: Insta_feed_WP_plugin
 Description: Custom Instagram feed plugin with AJAX, shortcode, and Elementor widget support.
-Version: 3.4.6
+Version: 3.4.12
 Author: Insta_feed_WP_plugin
 Text Domain: Insta_feed_WP_plugin
 Update URI: false
@@ -10,7 +10,7 @@ Update URI: false
 
 defined('ABSPATH') || exit;
 
-define('INSTA_FEED_WP_PLUGIN_VERSION', '3.4.6');
+define('INSTA_FEED_WP_PLUGIN_VERSION', '3.4.12');
 define('INSTA_FEED_WP_PLUGIN_FILE', __FILE__);
 define('INSTA_FEED_WP_PLUGIN_PATH', plugin_dir_path(__FILE__));
 define('INSTA_FEED_WP_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -81,7 +81,7 @@ function Insta_feed_WP_plugin_render_feed($atts = []) {
                     <button id="modal-close-btn" class="modal-nav-btn" type="button">&times;</button>
                 </div>
                 <div id="modal-caption-content">
-                    <p id="modal-caption-text" dir="ltr">Loading</p>
+                    <p id="modal-caption-text" dir="auto"></p>
                 </div>
             </div>
         </div>
@@ -122,8 +122,10 @@ function process_single_instagram_item($item) {
 
     if (!empty($slides)) {
         return [
-            'id'      => $item['id'],
-            'slides'  => $slides,
+            'id'        => $item['id'],
+            'slides'    => $slides,
+            'caption'   => $item['caption'] ?? '',
+            'permalink' => $item['permalink'] ?? '',
         ];
     }
     
@@ -140,6 +142,58 @@ function Insta_feed_WP_plugin_instagram_api_base_url() {
         : 'v19.0';
 
     return 'https://graph.instagram.com/' . trim($api_version, '/');
+}
+
+function Insta_feed_WP_plugin_decode_pagination_cursor($cursor) {
+    $cursor = (string) $cursor;
+
+    if (strpos($cursor, 'state:') !== 0) {
+        return [
+            'after'  => $cursor,
+            'offset' => 0,
+        ];
+    }
+
+    $payload = substr($cursor, 6);
+    $payload .= str_repeat('=', (4 - strlen($payload) % 4) % 4);
+    $decoded_payload = base64_decode(strtr($payload, '-_', '+/'), true);
+
+    if ($decoded_payload === false) {
+        return [
+            'after'  => '',
+            'offset' => 0,
+        ];
+    }
+
+    $decoded = json_decode($decoded_payload, true);
+
+    if (!is_array($decoded)) {
+        return [
+            'after'  => '',
+            'offset' => 0,
+        ];
+    }
+
+    return [
+        'after'  => isset($decoded['after']) ? sanitize_text_field($decoded['after']) : '',
+        'offset' => isset($decoded['offset']) ? max(0, absint($decoded['offset'])) : 0,
+    ];
+}
+
+function Insta_feed_WP_plugin_encode_pagination_cursor($after, $offset) {
+    $after = (string) $after;
+    $offset = max(0, absint($offset));
+
+    if ($after === '' && $offset === 0) {
+        return '';
+    }
+
+    $payload = wp_json_encode([
+        'after'  => $after,
+        'offset' => $offset,
+    ]);
+
+    return 'state:' . rtrim(strtr(base64_encode($payload), '+/', '-_'), '=');
 }
 
 /** --------------------------------------------------
@@ -160,14 +214,16 @@ function fetch_instagram_photos_directly() {
     $exclude_hashtag = '#ex';
     $debug_enabled = !empty($_GET['debug']) && current_user_can('manage_options');
     
+    $cursor_state = Insta_feed_WP_plugin_decode_pagination_cursor($after_cursor);
     $filtered_items = [];
-    $current_cursor = $after_cursor;
+    $current_cursor = $cursor_state['after'];
+    $current_offset = $cursor_state['offset'];
     $max_total_items = 1000;
     $processed_count = 0;
     $last_cursor_for_next_request = '';
     $last_debug = [];
 
-    // Keep fetching until enough valid posts are collected.
+    // Keep fetching pages, but remember the raw item offset inside a page so pagination never skips posts.
     while (count($filtered_items) < $target_count && $processed_count < $max_total_items) {
         
         // Build the Instagram API URL.
@@ -201,6 +257,7 @@ function fetch_instagram_photos_directly() {
             'http_code'     => $response_code,
             'body_preview'  => $debug_enabled ? substr(wp_strip_all_tags($body), 0, 500) : '',
             'current_after' => $current_cursor,
+            'current_offset' => $current_offset,
         ];
 
         if ($response_code < 200 || $response_code >= 300) {
@@ -236,8 +293,28 @@ function fetch_instagram_photos_directly() {
             break;
         }
 
+        $page_items = array_values($data['data']);
+        $page_item_count = count($page_items);
+        $next_cursor = $data['paging']['cursors']['after'] ?? '';
+
+        if ($current_offset >= $page_item_count) {
+            if (empty($next_cursor) || $next_cursor === $current_cursor) {
+                $last_cursor_for_next_request = '';
+                break;
+            }
+
+            $current_cursor = $next_cursor;
+            $current_offset = 0;
+            $last_cursor_for_next_request = $current_cursor;
+            continue;
+        }
+
         // Process posts one by one.
-        foreach ($data['data'] as $item) {
+        foreach ($page_items as $page_index => $item) {
+            if ($page_index < $current_offset) {
+                continue;
+            }
+
             $processed_count++;
             
             $caption = $item['caption'] ?? '';
@@ -255,15 +332,15 @@ function fetch_instagram_photos_directly() {
                 
                 // Store the cursor and stop after collecting the target count.
                 if (count($filtered_items) >= $target_count) {
-                    $last_cursor_for_next_request = $data['paging']['cursors']['after'] ?? '';
+                    $next_offset = $page_index + 1;
+                    $last_cursor_for_next_request = $next_offset < $page_item_count
+                        ? Insta_feed_WP_plugin_encode_pagination_cursor($current_cursor, $next_offset)
+                        : $next_cursor;
                     break 2;
                 }
             }
         }
 
-        // Update cursor for the next request.
-        $next_cursor = $data['paging']['cursors']['after'] ?? '';
-        
         // Stop when there is no new cursor.
         if (empty($next_cursor) || $next_cursor === $current_cursor) {
             $last_cursor_for_next_request = '';
@@ -271,6 +348,7 @@ function fetch_instagram_photos_directly() {
         }
         
         $current_cursor = $next_cursor;
+        $current_offset = 0;
         $last_cursor_for_next_request = $next_cursor;
     }
 
@@ -279,8 +357,10 @@ function fetch_instagram_photos_directly() {
         $firstSlideUrl = esc_url($item['slides'][0]['thumb']);
         $id = esc_attr($item['id']);
         $slidesJson = esc_attr(wp_json_encode($item['slides']));
+        $caption = esc_attr($item['caption'] ?? '');
+        $permalink = esc_url($item['permalink'] ?? '');
         return sprintf(
-            '<div class="instagram-photo" data-id="%s" data-slides="%s">
+            '<div class="instagram-photo" data-id="%s" data-slides="%s" data-caption="%s" data-permalink="%s">
                 <div class="slide-container">
                     <img class="slide-img slide-img-old" src="%s" alt="Instagram Post" loading="lazy">
                     <img class="slide-img slide-img-new" src="" alt="" loading="lazy">
@@ -288,6 +368,8 @@ function fetch_instagram_photos_directly() {
             </div>',
             $id,
             $slidesJson,
+            $caption,
+            $permalink,
             $firstSlideUrl
         );
     }, $filtered_items);
